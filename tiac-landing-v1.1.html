@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Intelligent Application Company</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --black:          #060608;
+      --white:          #f2f0ed;
+      --silver:         #b8b5b0;
+      --tile-bg:        rgba(255,255,255,0.038);
+      --tile-border:    rgba(255,255,255,0.09);
+      --tile-hover-bg:  rgba(255,255,255,0.072);
+
+      --r1: #6bbf47;
+      --r2: #f7c223;
+      --r3: #f48024;
+      --r4: #e83b2e;
+      --r5: #9b59c7;
+      --r6: #4b9de0;
+
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-mono:    'DM Mono', 'Courier New', monospace;
+
+      /* per-tile accent vars — referenced by JS for colored shadows */
+      --t1-color: #4b9de0;
+      --t2-color: #f7c223;
+      --t3-color: #e83b2e;
+      --t4-color: #6bbf47;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--black);
+      color: var(--white);
+      font-family: var(--font-display);
+      cursor: none;
+    }
+
+    /* ─── REDUCED MOTION ─── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-delay: 0s !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* ─── CUSTOM CURSOR ─── */
+    #cursor, #cursor-ring {
+      position: fixed;
+      pointer-events: none;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      will-change: left, top;
+      transition-property: width, height, background, border-color, opacity;
+      transition-timing-function: ease;
+    }
+    #cursor {
+      z-index: 9999;
+      width: 6px; height: 6px;
+      background: var(--white);
+      transition-duration: .15s, .15s, .2s, .2s, .2s;
+    }
+    #cursor-ring {
+      z-index: 9998;
+      width: 30px; height: 30px;
+      border: 1px solid rgba(255,255,255,0.3);
+      transition-duration: 0s, 0s, 0s, .25s, .3s;
+    }
+    /* enlarge on tile hover */
+    body.hovering-tile #cursor {
+      width: 10px; height: 10px;
+      background: var(--r2);
+    }
+    body.hovering-tile #cursor-ring {
+      width: 46px; height: 46px;
+      border-color: rgba(247,194,35,0.45);
+    }
+    /* hide when mouse leaves window */
+    body.cursor-hidden #cursor,
+    body.cursor-hidden #cursor-ring { opacity: 0; }
+
+    /* ─── CANVAS GRAIN (rendered by JS) ─── */
+    #grain {
+      position: fixed; inset: 0; z-index: 2;
+      pointer-events: none;
+      opacity: .038;
+    }
+
+    /* ─── AMBIENT ORBS ─── */
+    .ambient {
+      position: fixed;
+      pointer-events: none;
+      z-index: 1;
+      border-radius: 50%;
+      filter: blur(130px);
+      will-change: transform;
+    }
+    .ambient-1 {
+      width: 700px; height: 700px;
+      top: -220px; left: -160px;
+      background: radial-gradient(circle, rgba(75,157,224,0.09) 0%, transparent 70%);
+      animation: driftA 18s ease-in-out infinite;
+    }
+    .ambient-2 {
+      width: 600px; height: 600px;
+      bottom: -200px; right: -120px;
+      background: radial-gradient(circle, rgba(155,89,199,0.09) 0%, transparent 70%);
+      animation: driftB 22s ease-in-out infinite;
+    }
+    .ambient-3 {
+      width: 500px; height: 500px;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(circle, rgba(247,194,35,0.04) 0%, transparent 70%);
+      animation: driftC 26s ease-in-out infinite;
+    }
+
+    @keyframes driftA {
+      0%, 100% { transform: translate(0, 0); }
+      33%       { transform: translate(40px, 30px); }
+      66%       { transform: translate(-20px, 50px); }
+    }
+    @keyframes driftB {
+      0%, 100% { transform: translate(0, 0); }
+      40%       { transform: translate(-50px, -30px); }
+      70%       { transform: translate(20px, -50px); }
+    }
+    @keyframes driftC {
+      0%, 100% { transform: translate(-50%, -50%); }
+      50%       { transform: translate(-50%, calc(-50% + 30px)); }
+    }
+
+    /* ─── LAYOUT ─── FIX: 4 explicit rows, grid takes the 1fr ─── */
+    #app {
+      position: relative; z-index: 3;
+      width: 100vw; height: 100vh;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;   /* header | hero | grid | footer */
+      padding: clamp(18px, 2.6vw, 40px) clamp(22px, 3.8vw, 56px);
+      gap: clamp(12px, 1.8vw, 24px);
+    }
+
+    /* ─── HEADER ─── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      /* FIX: glassmorphism strip */
+      background: rgba(6,6,8,0.5);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: clamp(10px, 1vw, 14px);
+      padding: clamp(10px, 1.1vw, 16px) clamp(16px, 1.8vw, 26px);
+      opacity: 0;
+      animation: fadeSlideDown 1s cubic-bezier(.22,1,.36,1) .15s forwards;
+    }
+
+    .logo-block { display: flex; align-items: center; gap: 13px; }
+
+    .logo-mark {
+      width: 34px; height: 34px; flex-shrink: 0;
+      /* FIX: subtle entrance rotate */
+      animation: logoSpin .9s cubic-bezier(.22,1,.36,1) .3s both;
+    }
+    @keyframes logoSpin {
+      from { opacity: 0; transform: rotate(-8deg) scale(.85); }
+      to   { opacity: 1; transform: rotate(0) scale(1); }
+    }
+    .logo-mark svg { width: 100%; height: 100%; }
+
+    .logo-text { display: flex; flex-direction: column; gap: 1px; }
+    .logo-text .the {
+      font-family: var(--font-mono);
+      font-size: 8.5px; letter-spacing: .22em; text-transform: uppercase;
+      color: var(--silver);
+    }
+    .logo-text .name {
+      font-size: clamp(13px, 1.3vw, 17px);
+      font-weight: 300; letter-spacing: .03em;
+      color: var(--white); line-height: 1;
+    }
+    .logo-text .abbr {
+      font-family: var(--font-mono);
+      font-size: 8px; letter-spacing: .2em; text-transform: uppercase;
+      color: rgba(184,181,176,.5);
+    }
+
+    nav { display: flex; align-items: center; gap: clamp(18px, 2.5vw, 36px); }
+    nav a {
+      font-family: var(--font-mono);
+      font-size: clamp(8.5px, .8vw, 10.5px);
+      letter-spacing: .18em; text-transform: uppercase;
+      color: var(--silver); text-decoration: none;
+      transition: color .2s; position: relative;
+      cursor: none;
+    }
+    nav a::after {
+      content: ''; position: absolute;
+      left: 0; bottom: -3px;
+      width: 0; height: 1px;
+      background: var(--white);
+      transition: width .3s ease;
+    }
+    nav a:hover { color: var(--white); }
+    nav a:hover::after { width: 100%; }
+
+    /* ─── HERO ─── */
+    .hero {
+      display: flex; flex-direction: column; justify-content: center;
+      padding-left: 2px;
+      opacity: 0;
+      animation: fadeSlideUp 1.1s cubic-bezier(.22,1,.36,1) .45s forwards;
+    }
+
+    .hero-eyebrow {
+      font-family: var(--font-mono);
+      font-size: clamp(8px, .78vw, 10px);
+      letter-spacing: .32em; text-transform: uppercase;
+      color: var(--silver); margin-bottom: clamp(5px, .8vw, 10px);
+      /* FIX: typewriter reveal */
+      overflow: hidden; white-space: nowrap;
+      width: 0; border-right: 1px solid var(--silver);
+      animation: typewriter 1.2s steps(30,end) .9s forwards,
+                 cursorBlink .7s step-end 2.1s 4;
+    }
+    @keyframes typewriter {
+      from { width: 0; }
+      to   { width: 22ch; border-color: transparent; }
+    }
+    @keyframes cursorBlink {
+      0%, 100% { border-color: transparent; }
+      50%       { border-color: var(--silver); }
+    }
+
+    .hero-headline {
+      font-size: clamp(28px, 4vw, 66px);
+      font-weight: 300; line-height: 1.05;
+      letter-spacing: -.015em; color: var(--white);
+    }
+    .hero-headline em {
+      font-style: italic;
+      background: linear-gradient(100deg, var(--r6), var(--r5), var(--r4), var(--r3), var(--r2), var(--r1));
+      background-size: 200% 100%;
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: gradientShift 6s ease-in-out infinite;
+    }
+    @keyframes gradientShift {
+      0%, 100% { background-position: 0% 50%; }
+      50%       { background-position: 100% 50%; }
+    }
+
+    .hero-sub {
+      margin-top: clamp(7px, .9vw, 13px);
+      font-size: clamp(11px, 1vw, 14px);
+      font-weight: 300; color: var(--silver);
+      letter-spacing: .02em; max-width: 380px; line-height: 1.65;
+    }
+
+    /* ─── PRODUCT GRID ─── FIX: fills 1fr row ─── */
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: clamp(7px, 1vw, 14px);
+      min-height: 0;                     /* allow shrink inside 1fr */
+      opacity: 0;
+      animation: fadeSlideUp .9s cubic-bezier(.22,1,.36,1) .8s forwards;
+    }
+
+    /* ─── TILE ─── */
+    .tile {
+      position: relative;
+      background: var(--tile-bg);
+      border: 1px solid var(--tile-border);
+      border-radius: clamp(12px, 1.1vw, 18px);
+      padding: clamp(16px, 1.8vw, 26px);
+      display: flex; flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      cursor: none;
+      min-height: 0;                     /* FIX: respect grid row height */
+      /* FIX: stagger per tile via --i custom prop */
+      opacity: 0;
+      animation: tileRise .7s cubic-bezier(.22,1,.36,1) calc(.95s + var(--i) * .12s) forwards;
+      transition:
+        background .3s ease,
+        border-color .3s ease,
+        transform .35s cubic-bezier(.22,1,.36,1),
+        box-shadow .35s ease;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      will-change: transform;
+    }
+    @keyframes tileRise {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Mouse-follow inner glow */
+    .tile::before {
+      content: '';
+      position: absolute; inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(
+        circle at var(--mx, 50%) var(--my, 50%),
+        rgba(255,255,255,0.085) 0%,    /* FIX: was 0.06 — more visible */
+        transparent 55%
+      );
+      opacity: 0; transition: opacity .3s;
+      pointer-events: none;
+    }
+    .tile:hover::before { opacity: 1; }
+
+    /* Top accent stripe */
+    .tile::after {
+      content: '';
+      position: absolute;
+      top: 0; left: clamp(16px, 1.8vw, 26px);
+      width: 26px; height: 2.5px;          /* FIX: slightly taller */
+      border-radius: 0 0 3px 3px;
+      opacity: .9;
+      transition: width .4s cubic-bezier(.22,1,.36,1), opacity .3s;
+    }
+    .tile:hover::after { width: 52px; opacity: 1; }
+
+    .tile-1 { --i: 0; --accent: var(--r6); }
+    .tile-2 { --i: 1; --accent: var(--r2); }
+    .tile-3 { --i: 2; --accent: var(--r4); }
+    .tile-4 { --i: 3; --accent: var(--r1); }
+
+    .tile-1::after { background: linear-gradient(90deg, var(--r6), var(--r5)); }
+    .tile-2::after { background: linear-gradient(90deg, var(--r3), var(--r2)); }
+    .tile-3::after { background: linear-gradient(90deg, var(--r4), var(--r3)); }
+    .tile-4::after { background: linear-gradient(90deg, var(--r1), var(--r2)); }
+
+    /* FIX: colored shadow on hover per-tile */
+    .tile-1:hover { box-shadow: 0 16px 40px rgba(75,157,224,.12), 0 2px 8px rgba(0,0,0,.4); border-color: rgba(75,157,224,0.25); }
+    .tile-2:hover { box-shadow: 0 16px 40px rgba(247,194,35,.1),  0 2px 8px rgba(0,0,0,.4); border-color: rgba(247,194,35,0.2); }
+    .tile-3:hover { box-shadow: 0 16px 40px rgba(232,59,46,.1),   0 2px 8px rgba(0,0,0,.4); border-color: rgba(232,59,46,0.2); }
+    .tile-4:hover { box-shadow: 0 16px 40px rgba(107,191,71,.1),  0 2px 8px rgba(0,0,0,.4); border-color: rgba(107,191,71,0.2); }
+
+    .tile:hover { background: var(--tile-hover-bg); transform: translateY(-4px); }
+
+    /* FIX: keyboard focus visible ring */
+    .tile:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.35);
+    }
+
+    .tile-tag {
+      font-family: var(--font-mono);
+      font-size: clamp(7px, .62vw, 8.5px);
+      letter-spacing: .25em; text-transform: uppercase;
+      color: var(--silver); margin-bottom: clamp(8px, 1.2vw, 16px);
+      opacity: .65;
+    }
+    .tile-icon {
+      width: clamp(30px, 2.8vw, 44px);
+      height: clamp(30px, 2.8vw, 44px);
+      margin-bottom: clamp(10px, 1.3vw, 18px);
+      transition: transform .35s cubic-bezier(.22,1,.36,1);
+    }
+    /* FIX: icon floats gently on tile hover */
+    .tile:hover .tile-icon { transform: translateY(-2px); }
+    .tile-icon svg { width: 100%; height: 100%; }
+
+    .tile-name {
+      font-size: clamp(17px, 1.65vw, 26px);
+      font-weight: 400; letter-spacing: -.01em; line-height: 1.1;
+      color: var(--white); margin-bottom: clamp(5px, .7vw, 9px);
+      transition: color .25s;
+    }
+    .tile-name em { font-style: italic; font-weight: 300; }
+
+    /* FIX: tile name tints to accent on hover */
+    .tile-1:hover .tile-name { color: #8ec8ef; }
+    .tile-2:hover .tile-name { color: #f7c223; }
+    .tile-3:hover .tile-name { color: #f0756b; }
+    .tile-4:hover .tile-name { color: #8fd470; }
+
+    .tile-desc {
+      font-size: clamp(9.5px, .85vw, 12.5px);
+      font-weight: 300; color: var(--silver);
+      line-height: 1.65; letter-spacing: .01em;
+    }
+    .tile-bottom {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: clamp(12px, 1.6vw, 20px);
+    }
+    .tile-status {
+      display: flex; align-items: center; gap: 6px;
+      font-family: var(--font-mono);
+      font-size: clamp(7px, .62vw, 8.5px);
+      letter-spacing: .15em; text-transform: uppercase;
+      color: var(--silver);
+    }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; }
+    .dot-live { background: var(--r1); box-shadow: 0 0 6px var(--r1); animation: pulseDot 2s ease-in-out infinite; }
+    .dot-beta { background: var(--r2); box-shadow: 0 0 6px var(--r2); animation: pulseDot 2.5s ease-in-out infinite; }
+    .dot-soon { background: rgba(184,181,176,.4); }
+
+    .tile-arrow {
+      width: clamp(20px, 1.9vw, 27px);
+      height: clamp(20px, 1.9vw, 27px);
+      border: 1px solid var(--tile-border);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: border-color .25s, transform .3s cubic-bezier(.22,1,.36,1), background .25s;
+    }
+    .tile:hover .tile-arrow {
+      border-color: rgba(255,255,255,0.45);
+      background: rgba(255,255,255,0.06);
+      transform: rotate(45deg);
+    }
+    .tile-arrow svg {
+      width: 9px; height: 9px;
+      fill: none; stroke: var(--silver); stroke-width: 1.5;
+    }
+
+    /* ─── FOOTER ─── */
+    footer {
+      display: flex; align-items: center; justify-content: space-between;
+      opacity: 0;
+      animation: fadeSlideUp .9s cubic-bezier(.22,1,.36,1) 1.35s forwards;
+    }
+    .footer-copy {
+      font-family: var(--font-mono);
+      font-size: clamp(7px, .65vw, 8.5px);
+      letter-spacing: .15em; text-transform: uppercase;
+      color: rgba(184,181,176,.3);
+    }
+    .footer-rainbow {
+      display: flex; gap: 4px; align-items: center;
+    }
+    /* FIX: taller rainbow bars, more visible */
+    .footer-rainbow span {
+      display: block; width: 18px; height: 3px;
+      border-radius: 2px;
+      animation: shimmer 3s ease-in-out infinite;
+    }
+    .footer-rainbow span:nth-child(1) { background: var(--r1); animation-delay: 0s; }
+    .footer-rainbow span:nth-child(2) { background: var(--r2); animation-delay: .14s; }
+    .footer-rainbow span:nth-child(3) { background: var(--r3); animation-delay: .28s; }
+    .footer-rainbow span:nth-child(4) { background: var(--r4); animation-delay: .42s; }
+    .footer-rainbow span:nth-child(5) { background: var(--r5); animation-delay: .56s; }
+    .footer-rainbow span:nth-child(6) { background: var(--r6); animation-delay: .70s; }
+
+    .footer-tagline {
+      font-family: var(--font-display);
+      font-style: italic; font-weight: 300;
+      font-size: clamp(10px, .95vw, 13px);
+      color: rgba(184,181,176,.45);
+      letter-spacing: .04em;
+    }
+
+    /* ─── KEYFRAMES ─── */
+    @keyframes fadeSlideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .25; }
+    }
+    @keyframes shimmer {
+      0%, 100% { opacity: .45; }
+      50%       { opacity: 1; }
+    }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 960px) {
+      .product-grid { grid-template-columns: repeat(2, 1fr); }
+      html, body { overflow: auto; }
+      #app { grid-template-rows: auto auto auto auto; height: auto; min-height: 100vh; }
+    }
+    @media (max-width: 560px) {
+      .product-grid { grid-template-columns: 1fr; }
+      .hero-headline { font-size: clamp(26px, 8vw, 42px); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- FIX: canvas grain (JS renders real noise, much more reliable than SVG) -->
+  <canvas id="grain"></canvas>
+
+  <div id="cursor"></div>
+  <div id="cursor-ring"></div>
+
+  <div class="ambient ambient-1"></div>
+  <div class="ambient ambient-2"></div>
+  <div class="ambient ambient-3"></div>
+
+  <div id="app">
+
+    <!-- HEADER -->
+    <header>
+      <div class="logo-block">
+        <div class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="3" width="30" height="30" rx="7" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>
+            <rect x="6"   y="8"  width="2.4" height="4" rx="1" fill="#6bbf47"/>
+            <rect x="6"   y="13" width="2.4" height="4" rx="1" fill="#f7c223"/>
+            <rect x="6"   y="18" width="2.4" height="4" rx="1" fill="#f48024"/>
+            <rect x="6"   y="23" width="2.4" height="4" rx="1" fill="#e83b2e"/>
+            <path d="M12 10h13M18.5 10v16" stroke="rgba(242,240,237,0.9)" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <span class="the">The</span>
+          <span class="name">Intelligent Application Company</span>
+          <span class="abbr">TIAC · Est. 2024</span>
+        </div>
+      </div>
+      <nav aria-label="Main navigation">
+        <a href="#">Products</a>
+        <a href="#">Studio</a>
+        <a href="#">Journal</a>
+        <a href="#">Contact</a>
+      </nav>
+    </header>
+
+    <!-- HERO -->
+    <div class="hero" role="banner">
+      <p class="hero-eyebrow" aria-label="Software for the thinking class">Software for the thinking class</p>
+      <h1 class="hero-headline">
+        Applications built for<br>
+        <em>the unreasonable ones.</em>
+      </h1>
+      <p class="hero-sub">Four tools. One principle — technology should feel like it was made by someone who cared about you.</p>
+    </div>
+
+    <!-- PRODUCT GRID -->
+    <div class="product-grid" role="list" aria-label="TIAC products">
+
+      <!-- 1 / FightMed -->
+      <article class="tile tile-1" role="listitem" tabindex="0" aria-label="FightMed – Healthcare Fintech" data-href="#">
+        <div class="tile-top">
+          <p class="tile-tag">Healthcare · Fintech</p>
+          <div class="tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 46 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="23" cy="23" r="20" stroke="rgba(75,157,224,0.25)" stroke-width="1"/>
+              <circle cx="23" cy="23" r="20" stroke="rgba(75,157,224,0.08)" stroke-width="6"/>
+              <path d="M17 23h12M23 17v12" stroke="#4b9de0" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M7.5 38.5 L14 32" stroke="rgba(75,157,224,0.45)" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h2 class="tile-name">Fight<em>Med</em></h2>
+          <p class="tile-desc">AI-powered medical bill negotiation. We fight your hospital so you keep more of what you earn.</p>
+        </div>
+        <div class="tile-bottom">
+          <span class="tile-status"><span class="status-dot dot-live" aria-label="Live"></span> Live</span>
+          <span class="tile-arrow" aria-hidden="true">
+            <svg viewBox="0 0 10 10"><path d="M2 8L8 2M8 2H4M8 2V6"/></svg>
+          </span>
+        </div>
+      </article>
+
+      <!-- 2 / LinkedinXP -->
+      <article class="tile tile-2" role="listitem" tabindex="0" aria-label="LinkedinXP – AI Professional" data-href="#">
+        <div class="tile-top">
+          <p class="tile-tag">AI · Professional</p>
+          <div class="tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 46 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="4" y="4" width="38" height="38" rx="9" stroke="rgba(247,194,35,0.25)" stroke-width="1"/>
+              <rect x="4" y="4" width="38" height="38" rx="9" stroke="rgba(247,194,35,0.07)" stroke-width="6"/>
+              <path d="M13 19v14M13 14v2" stroke="#f7c223" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M20 33V23c0-3 2-5 5-5s5 2 5 5v10" stroke="#f7c223" stroke-width="2.2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h2 class="tile-name">Linkedin<em>XP</em></h2>
+          <p class="tile-desc">Generative intelligence for your professional voice. Post content that builds authority, authentically.</p>
+        </div>
+        <div class="tile-bottom">
+          <span class="tile-status"><span class="status-dot dot-beta" aria-label="Beta"></span> Beta</span>
+          <span class="tile-arrow" aria-hidden="true">
+            <svg viewBox="0 0 10 10"><path d="M2 8L8 2M8 2H4M8 2V6"/></svg>
+          </span>
+        </div>
+      </article>
+
+      <!-- 3 / College War Room -->
+      <article class="tile tile-3" role="listitem" tabindex="0" aria-label="College War Room – Education Data" data-href="#">
+        <div class="tile-top">
+          <p class="tile-tag">Education · Data</p>
+          <div class="tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 46 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="23" cy="23" r="20" stroke="rgba(232,59,46,0.25)" stroke-width="1"/>
+              <circle cx="23" cy="23" r="20" stroke="rgba(232,59,46,0.07)" stroke-width="6"/>
+              <path d="M14 32V20L23 12L32 20V32" stroke="#e83b2e" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M19 32V26h8v6" stroke="#e83b2e" stroke-width="1.6" stroke-linejoin="round"/>
+              <circle cx="23" cy="22" r="2" fill="rgba(232,59,46,0.2)" stroke="#e83b2e" stroke-width="1.2"/>
+            </svg>
+          </div>
+          <h2 class="tile-name">College <em>War Room</em></h2>
+          <p class="tile-desc">Probabilistic admissions intelligence. Know your real odds before spending a single application fee.</p>
+        </div>
+        <div class="tile-bottom">
+          <span class="tile-status"><span class="status-dot dot-beta" aria-label="Beta"></span> Beta</span>
+          <span class="tile-arrow" aria-hidden="true">
+            <svg viewBox="0 0 10 10"><path d="M2 8L8 2M8 2H4M8 2V6"/></svg>
+          </span>
+        </div>
+      </article>
+
+      <!-- 4 / Bet on the House -->
+      <article class="tile tile-4" role="listitem" tabindex="0" aria-label="Bet on the House – Fintech Wellness" data-href="#">
+        <div class="tile-top">
+          <p class="tile-tag">Fintech · Wellness</p>
+          <div class="tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 46 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="5" y="14" width="36" height="22" rx="5" stroke="rgba(107,191,71,0.25)" stroke-width="1"/>
+              <rect x="5" y="14" width="36" height="22" rx="5" stroke="rgba(107,191,71,0.07)" stroke-width="6"/>
+              <path d="M14 14V10a9 9 0 0118 0v4" stroke="#6bbf47" stroke-width="1.6" stroke-linecap="round"/>
+              <circle cx="23" cy="25" r="4" stroke="#6bbf47" stroke-width="1.5"/>
+              <path d="M23 22v3l2 2" stroke="#6bbf47" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h2 class="tile-name">Bet on the <em>House</em></h2>
+          <p class="tile-desc">Sports gambling restriction software that protects your net worth while you enjoy the game.</p>
+        </div>
+        <div class="tile-bottom">
+          <span class="tile-status"><span class="status-dot dot-soon" aria-label="Coming soon"></span> Coming Soon</span>
+          <span class="tile-arrow" aria-hidden="true">
+            <svg viewBox="0 0 10 10"><path d="M2 8L8 2M8 2H4M8 2V6"/></svg>
+          </span>
+        </div>
+      </article>
+
+    </div>
+
+    <!-- FOOTER -->
+    <footer>
+      <span class="footer-copy">&copy; 2025 The Intelligent Application Company</span>
+      <div class="footer-rainbow" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <span class="footer-tagline">Think different. Build precisely.</span>
+    </footer>
+
+  </div>
+
+  <script>
+    /* ─── CANVAS GRAIN ─── */
+    (function() {
+      const canvas = document.getElementById('grain');
+      const ctx = canvas.getContext('2d');
+      let w, h, frame = 0;
+
+      function resize() {
+        w = canvas.width  = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+      }
+
+      function drawGrain() {
+        const imageData = ctx.createImageData(w, h);
+        const buf = imageData.data;
+        for (let i = 0; i < buf.length; i += 4) {
+          const v = Math.random() * 255 | 0;
+          buf[i] = buf[i+1] = buf[i+2] = v;
+          buf[i+3] = 255;
+        }
+        ctx.putImageData(imageData, 0, 0);
+      }
+
+      function loop() {
+        frame++;
+        if (frame % 3 === 0) drawGrain();   /* refresh every 3 frames — performance */
+        requestAnimationFrame(loop);
+      }
+
+      resize();
+      window.addEventListener('resize', resize);
+      loop();
+    })();
+
+    /* ─── CUSTOM CURSOR ─── */
+    const cur  = document.getElementById('cursor');
+    const ring = document.getElementById('cursor-ring');
+    let mx = 0, my = 0, rx = 0, ry = 0;
+
+    document.addEventListener('mousemove', e => {
+      mx = e.clientX; my = e.clientY;
+      cur.style.left = mx + 'px';
+      cur.style.top  = my + 'px';
+    });
+
+    /* FIX: hide cursor when window loses mouse */
+    document.addEventListener('mouseleave', () => document.body.classList.add('cursor-hidden'));
+    document.addEventListener('mouseenter', () => document.body.classList.remove('cursor-hidden'));
+
+    (function animateRing() {
+      rx += (mx - rx) * 0.11;
+      ry += (my - ry) * 0.11;
+      ring.style.left = rx + 'px';
+      ring.style.top  = ry + 'px';
+      requestAnimationFrame(animateRing);
+    })();
+
+    /* ─── TILES ─── */
+    const tiles = document.querySelectorAll('.tile');
+
+    tiles.forEach(tile => {
+      /* Mouse-follow glow */
+      tile.addEventListener('mousemove', e => {
+        const r = tile.getBoundingClientRect();
+        tile.style.setProperty('--mx', ((e.clientX - r.left) / r.width  * 100).toFixed(1) + '%');
+        tile.style.setProperty('--my', ((e.clientY - r.top)  / r.height * 100).toFixed(1) + '%');
+      });
+
+      /* Cursor state */
+      tile.addEventListener('mouseenter', () => document.body.classList.add('hovering-tile'));
+      tile.addEventListener('mouseleave', () => document.body.classList.remove('hovering-tile'));
+
+      /* Click / Enter key navigation */
+      function navigate() {
+        const href = tile.dataset.href;
+        if (href && href !== '#') window.open(href, '_blank', 'noopener');
+      }
+      tile.addEventListener('click', navigate);
+      tile.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(); }
+      });
+
+      /* FIX: subtle click press-down feedback */
+      tile.addEventListener('mousedown', () => { tile.style.transform = 'translateY(-1px) scale(0.99)'; });
+      tile.addEventListener('mouseup',   () => { tile.style.transform = ''; });
+    });
+  </script>
+</body>
+</html>
