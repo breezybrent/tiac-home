@@ -96,13 +96,11 @@
       #cursor, #cursor-ring { display: none; }
     }
 
-    /* ─── CANVAS GRAIN (rendered at reduced res, scaled up) ─── */
+    /* ─── CANVAS GRAIN ─── */
     #grain {
       position: fixed; inset: 0; z-index: 2;
-      width: 100%; height: 100%;
       pointer-events: none;
       opacity: .038;
-      image-rendering: pixelated;
     }
 
     /* ─── AMBIENT ORBS ─── */
@@ -667,35 +665,35 @@
   </div>
 
   <script>
-    /* ─── CANVAS GRAIN (renders at 1/4 res for performance) ─── */
+    /* ─── CANVAS GRAIN (pre-rendered frames for performance) ─── */
     (function() {
-      var SCALE = 4;
       var canvas = document.getElementById('grain');
       var ctx = canvas.getContext('2d');
-      var w, h, frame = 0;
+      var w, h, frames = [], frameCount = 6, idx = 0;
 
-      function resize() {
-        w = canvas.width  = (window.innerWidth  / SCALE) | 0;
-        h = canvas.height = (window.innerHeight / SCALE) | 0;
-      }
-
-      function drawGrain() {
-        var imageData = ctx.createImageData(w, h);
-        var buf = new Uint32Array(imageData.data.buffer);
-        for (var i = 0, len = buf.length; i < len; i++) {
-          var v = Math.random() * 255 | 0;
-          buf[i] = 0xFF000000 | (v << 16) | (v << 8) | v;
+      function buildFrames() {
+        w = canvas.width  = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        frames = [];
+        for (var f = 0; f < frameCount; f++) {
+          var imageData = ctx.createImageData(w, h);
+          var buf = new Uint32Array(imageData.data.buffer);
+          for (var i = 0, len = buf.length; i < len; i++) {
+            var v = Math.random() * 255 | 0;
+            buf[i] = 0xFF000000 | (v << 16) | (v << 8) | v;
+          }
+          frames.push(imageData);
         }
-        ctx.putImageData(imageData, 0, 0);
       }
 
       function loop() {
-        if (++frame % 4 === 0) drawGrain();
-        requestAnimationFrame(loop);
+        ctx.putImageData(frames[idx], 0, 0);
+        idx = (idx + 1) % frameCount;
+        setTimeout(loop, 100);
       }
 
-      resize();
-      window.addEventListener('resize', resize);
+      buildFrames();
+      window.addEventListener('resize', buildFrames);
       loop();
     })();
 
